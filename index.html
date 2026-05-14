@@ -1,0 +1,903 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>JPG 照片壓縮工具</title>
+  <style>
+    :root {
+      --ink: #202124;
+      --muted: #667085;
+      --line: #d6dde8;
+      --panel: #ffffff;
+      --accent: #176b87;
+      --accent-strong: #0f5368;
+      --ok: #16794c;
+      --warn: #b45309;
+      --bad: #b42318;
+      --shadow: 0 16px 42px rgba(24, 40, 61, 0.12);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Microsoft JhengHei", "PingFang TC", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--ink);
+      background:
+        linear-gradient(140deg, rgba(23, 107, 135, 0.14), transparent 34%),
+        linear-gradient(320deg, rgba(239, 182, 97, 0.16), transparent 32%),
+        #f8fafc;
+    }
+
+    button,
+    input {
+      font: inherit;
+    }
+
+    .app {
+      width: min(1120px, calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 28px 0 36px;
+    }
+
+    header {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 20px;
+      margin-bottom: 18px;
+    }
+
+    h1 {
+      margin: 0 0 6px;
+      font-size: clamp(28px, 4vw, 44px);
+      line-height: 1.08;
+      letter-spacing: 0;
+    }
+
+    .subtitle {
+      margin: 0;
+      color: var(--muted);
+      font-size: 16px;
+      line-height: 1.6;
+    }
+
+    .settings {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.74);
+      backdrop-filter: blur(10px);
+    }
+
+    .settings label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .settings input {
+      width: 82px;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      color: var(--ink);
+      background: #fff;
+    }
+
+    .dropzone {
+      position: relative;
+      display: grid;
+      place-items: center;
+      min-height: 250px;
+      padding: 28px;
+      border: 2px dashed #9bb4c5;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.84);
+      box-shadow: var(--shadow);
+      transition: border-color 160ms ease, transform 160ms ease, background 160ms ease;
+    }
+
+    .dropzone.dragging {
+      transform: translateY(-2px);
+      border-color: var(--accent);
+      background: #eef8fb;
+    }
+
+    .drop-inner {
+      display: grid;
+      gap: 16px;
+      justify-items: center;
+      text-align: center;
+    }
+
+    .upload-mark {
+      display: grid;
+      place-items: center;
+      width: 74px;
+      height: 74px;
+      border-radius: 50%;
+      background: #e7f2f5;
+      color: var(--accent);
+    }
+
+    .upload-mark svg {
+      width: 38px;
+      height: 38px;
+    }
+
+    .drop-title {
+      margin: 0;
+      font-size: 24px;
+      font-weight: 700;
+    }
+
+    .drop-note {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.55;
+      max-width: 620px;
+    }
+
+    .file-input {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+    }
+
+    .actions {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      margin: 18px 0;
+      flex-wrap: wrap;
+    }
+
+    .buttons {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .primary,
+    .secondary {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      min-height: 44px;
+      padding: 10px 16px;
+      border-radius: 7px;
+      border: 1px solid transparent;
+      cursor: pointer;
+      font-weight: 700;
+    }
+
+    .primary {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    .primary:hover {
+      background: var(--accent-strong);
+    }
+
+    .secondary {
+      color: var(--accent-strong);
+      background: #fff;
+      border-color: var(--line);
+    }
+
+    button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .status {
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .metric {
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.82);
+    }
+
+    .metric strong {
+      display: block;
+      font-size: 24px;
+      line-height: 1.2;
+    }
+
+    .metric span {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .table-wrap {
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      box-shadow: 0 8px 28px rgba(24, 40, 61, 0.08);
+    }
+
+    table {
+      width: 100%;
+      min-width: 760px;
+      border-collapse: collapse;
+    }
+
+    th,
+    td {
+      padding: 12px 14px;
+      border-bottom: 1px solid #e8edf4;
+      text-align: left;
+      vertical-align: middle;
+      font-size: 14px;
+    }
+
+    th {
+      color: #475467;
+      background: #f7f9fc;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .name-cell {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 260px;
+    }
+
+    .thumb {
+      flex: 0 0 auto;
+      width: 58px;
+      height: 44px;
+      object-fit: cover;
+      border-radius: 6px;
+      background: #edf2f7;
+    }
+
+    .filename {
+      font-weight: 700;
+      word-break: break-word;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 28px;
+      padding: 4px 9px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .queued {
+      color: #475467;
+      background: #eef2f6;
+    }
+
+    .working {
+      color: #0f5368;
+      background: #def3f7;
+    }
+
+    .done {
+      color: var(--ok);
+      background: #e8f6ee;
+    }
+
+    .warning {
+      color: var(--warn);
+      background: #fff4df;
+    }
+
+    .error {
+      color: var(--bad);
+      background: #fee4e2;
+    }
+
+    .progress {
+      width: 100%;
+      height: 9px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: #edf2f7;
+    }
+
+    .bar {
+      width: 0%;
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), #ef9f4d);
+      transition: width 140ms ease;
+    }
+
+    .empty {
+      padding: 22px;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    @media (max-width: 780px) {
+      .app {
+        width: min(100vw - 20px, 1120px);
+        padding-top: 18px;
+      }
+
+      header {
+        display: grid;
+        align-items: start;
+      }
+
+      .summary {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .dropzone {
+        min-height: 230px;
+        padding: 20px;
+      }
+    }
+
+    @media (max-width: 460px) {
+      .summary {
+        grid-template-columns: 1fr;
+      }
+
+      .buttons,
+      .primary,
+      .secondary {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header>
+      <div>
+        <h1>JPG 照片壓縮工具</h1>
+        <p class="subtitle">批次把網拍上架照片縮到指定大小以下，保持原本比例，所有照片都只在你的電腦處理。</p>
+      </div>
+      <div class="settings" aria-label="壓縮設定">
+        <label for="targetSize">每張小於</label>
+        <input id="targetSize" type="number" min="0.2" max="20" step="0.1" value="2">
+        <span>MB</span>
+      </div>
+    </header>
+
+    <section id="dropzone" class="dropzone">
+      <input id="fileInput" class="file-input" type="file" accept="image/jpeg,.jpg,.jpeg" multiple>
+      <div class="drop-inner">
+        <div class="upload-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none">
+            <path d="M12 16V4m0 0 5 5m-5-5-5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M20 16.5V18a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-1.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div>
+          <p class="drop-title">拖曳照片到這裡，或點一下選取</p>
+          <p class="drop-note">可一次選多張 JPG / JPEG。壓縮後會自動產生 ZIP 檔，檔名前方加上 compressed_。</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="actions" aria-label="操作">
+      <div class="buttons">
+        <button id="compressBtn" class="primary" type="button" disabled>
+          <span aria-hidden="true">↓</span>
+          一鍵壓縮照片
+        </button>
+        <button id="downloadBtn" class="primary" type="button" disabled hidden>
+          <span aria-hidden="true">↓</span>
+          下載 ZIP
+        </button>
+        <button id="clearBtn" class="secondary" type="button" disabled>清除清單</button>
+      </div>
+      <div id="status" class="status">尚未選取照片</div>
+    </section>
+
+    <section class="summary" aria-label="摘要">
+      <div class="metric"><strong id="countMetric">0</strong><span>張照片</span></div>
+      <div class="metric"><strong id="beforeMetric">0 MB</strong><span>原始總容量</span></div>
+      <div class="metric"><strong id="afterMetric">0 MB</strong><span>壓縮後總容量</span></div>
+      <div class="metric"><strong id="savedMetric">0%</strong><span>節省空間</span></div>
+    </section>
+
+    <section class="table-wrap" aria-label="照片清單">
+      <table>
+        <thead>
+          <tr>
+            <th>照片</th>
+            <th>原始大小</th>
+            <th>壓縮後</th>
+            <th>尺寸</th>
+            <th>狀態</th>
+            <th>進度</th>
+          </tr>
+        </thead>
+        <tbody id="fileRows">
+          <tr><td class="empty" colspan="6">選取照片後，處理結果會顯示在這裡。</td></tr>
+        </tbody>
+      </table>
+    </section>
+  </main>
+
+  <script>
+    const MAX_CANVAS_SIDE = 8192;
+    const encoderMime = "image/jpeg";
+    const state = {
+      items: [],
+      zipBlob: null,
+      zipName: "",
+      running: false
+    };
+
+    const els = {
+      fileInput: document.getElementById("fileInput"),
+      dropzone: document.getElementById("dropzone"),
+      compressBtn: document.getElementById("compressBtn"),
+      downloadBtn: document.getElementById("downloadBtn"),
+      clearBtn: document.getElementById("clearBtn"),
+      status: document.getElementById("status"),
+      rows: document.getElementById("fileRows"),
+      targetSize: document.getElementById("targetSize"),
+      countMetric: document.getElementById("countMetric"),
+      beforeMetric: document.getElementById("beforeMetric"),
+      afterMetric: document.getElementById("afterMetric"),
+      savedMetric: document.getElementById("savedMetric")
+    };
+
+    els.fileInput.addEventListener("change", () => addFiles(els.fileInput.files));
+    els.compressBtn.addEventListener("click", compressAll);
+    els.downloadBtn.addEventListener("click", downloadReadyZip);
+    els.clearBtn.addEventListener("click", clearAll);
+    els.targetSize.addEventListener("input", () => {
+      state.zipBlob = null;
+      updateControls();
+    });
+
+    ["dragenter", "dragover"].forEach((eventName) => {
+      els.dropzone.addEventListener(eventName, (event) => {
+        event.preventDefault();
+        els.dropzone.classList.add("dragging");
+      });
+    });
+
+    ["dragleave", "drop"].forEach((eventName) => {
+      els.dropzone.addEventListener(eventName, (event) => {
+        event.preventDefault();
+        els.dropzone.classList.remove("dragging");
+      });
+    });
+
+    els.dropzone.addEventListener("drop", (event) => {
+      addFiles(event.dataTransfer.files);
+    });
+
+    function addFiles(fileList) {
+      const files = Array.from(fileList || []).filter((file) => {
+        const name = file.name.toLowerCase();
+        return file.type === "image/jpeg" || name.endsWith(".jpg") || name.endsWith(".jpeg");
+      });
+
+      if (!files.length) {
+        setStatus("請選取 JPG / JPEG 照片");
+        return;
+      }
+
+      const newItems = files.map((file) => ({
+        id: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`,
+        file,
+        name: file.name,
+        before: file.size,
+        after: null,
+        width: null,
+        height: null,
+        outputBlob: null,
+        previewUrl: URL.createObjectURL(file),
+        progress: 0,
+        status: "queued",
+        message: "等待中"
+      }));
+
+      state.items.push(...newItems);
+      state.zipBlob = null;
+      render();
+      setStatus(`已加入 ${files.length} 張照片`);
+      els.fileInput.value = "";
+    }
+
+    async function compressAll() {
+      if (!state.items.length || state.running) return;
+
+      state.running = true;
+      state.zipBlob = null;
+      updateControls();
+      const targetBytes = getTargetBytes();
+      let completed = 0;
+
+      for (const item of state.items) {
+        item.status = "working";
+        item.message = "處理中";
+        item.progress = 8;
+        render();
+
+        try {
+          const result = await compressImage(item.file, targetBytes, (progress) => {
+            item.progress = progress;
+            renderRow(item);
+          });
+          item.outputBlob = result.blob;
+          item.after = result.blob.size;
+          item.width = result.width;
+          item.height = result.height;
+          item.progress = 100;
+          item.status = result.blob.size <= targetBytes ? "done" : "warning";
+          item.message = result.blob.size <= targetBytes ? "完成" : "已盡量壓縮";
+        } catch (error) {
+          item.status = "error";
+          item.message = error.message || "處理失敗";
+          item.progress = 100;
+        }
+
+        completed += 1;
+        setStatus(`已處理 ${completed} / ${state.items.length} 張`);
+        render();
+      }
+
+      const readyItems = state.items.filter((item) => item.outputBlob);
+      if (readyItems.length) {
+        const zipBlob = await buildZip(readyItems.map((item) => ({
+          name: makeOutputName(item.name),
+          blob: item.outputBlob
+        })));
+        state.zipBlob = zipBlob;
+        state.zipName = `jpg-compressed-${new Date().toISOString().slice(0, 10)}.zip`;
+        setStatus(`完成，請按「下載 ZIP」儲存 ${readyItems.length} 張壓縮照片`);
+      } else {
+        setStatus("沒有可下載的壓縮照片");
+      }
+
+      state.running = false;
+      updateControls();
+    }
+
+    async function compressImage(file, targetBytes, onProgress) {
+      const image = await loadImage(file);
+      let width = image.naturalWidth;
+      let height = image.naturalHeight;
+
+      const sideScale = Math.min(1, MAX_CANVAS_SIDE / Math.max(width, height));
+      if (sideScale < 1) {
+        width = Math.round(width * sideScale);
+        height = Math.round(height * sideScale);
+      }
+
+      let canvas = drawImage(image, width, height);
+      let high = 0.92;
+      let low = 0.42;
+      let best = await canvasToBlob(canvas, high);
+      onProgress(22);
+
+      if (best.size <= targetBytes) {
+        return { blob: best, width, height };
+      }
+
+      for (let i = 0; i < 8; i += 1) {
+        const quality = (low + high) / 2;
+        const blob = await canvasToBlob(canvas, quality);
+        if (blob.size <= targetBytes) {
+          best = blob;
+          low = quality;
+        } else {
+          high = quality;
+        }
+        onProgress(22 + Math.round((i + 1) * 5));
+      }
+
+      if (best.size <= targetBytes) {
+        return { blob: best, width, height };
+      }
+
+      let scale = Math.sqrt(targetBytes / best.size) * 0.92;
+      for (let i = 0; i < 14 && best.size > targetBytes; i += 1) {
+        const resizeScale = Math.min(0.92, scale);
+        if (Math.max(width, height) <= 640 && resizeScale >= 1) break;
+        width = Math.max(1, Math.round(width * resizeScale));
+        height = Math.max(1, Math.round(height * resizeScale));
+        canvas = drawImage(image, width, height);
+        best = await canvasToBlob(canvas, 0.82);
+        high = 0.82;
+        low = 0.36;
+
+        for (let j = 0; j < 6; j += 1) {
+          const quality = (low + high) / 2;
+          const blob = await canvasToBlob(canvas, quality);
+          if (blob.size <= targetBytes) {
+            best = blob;
+            low = quality;
+          } else {
+            high = quality;
+          }
+        }
+
+        scale = Math.sqrt(targetBytes / Math.max(best.size, 1)) * 0.9;
+        onProgress(65 + Math.round((i + 1) * 2.3));
+      }
+
+      return { blob: best, width, height };
+    }
+
+    function loadImage(file) {
+      return new Promise((resolve, reject) => {
+        const image = new Image();
+        const url = URL.createObjectURL(file);
+        image.onload = () => {
+          URL.revokeObjectURL(url);
+          resolve(image);
+        };
+        image.onerror = () => {
+          URL.revokeObjectURL(url);
+          reject(new Error("無法讀取照片"));
+        };
+        image.src = url;
+      });
+    }
+
+    function drawImage(image, width, height) {
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d", { alpha: false });
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(0, 0, width, height);
+      ctx.drawImage(image, 0, 0, width, height);
+      return canvas;
+    }
+
+    function canvasToBlob(canvas, quality) {
+      return new Promise((resolve, reject) => {
+        canvas.toBlob((blob) => {
+          if (blob) resolve(blob);
+          else reject(new Error("瀏覽器無法輸出 JPG"));
+        }, encoderMime, quality);
+      });
+    }
+
+    async function buildZip(files) {
+      const encoder = new TextEncoder();
+      const localParts = [];
+      const centralParts = [];
+      let offset = 0;
+
+      for (const file of files) {
+        const safeName = sanitizeZipName(file.name);
+        const nameBytes = encoder.encode(safeName);
+        const crc = await crc32(file.blob);
+        const size = file.blob.size;
+        const localHeader = new Uint8Array(30 + nameBytes.length);
+        const localView = new DataView(localHeader.buffer);
+
+        localView.setUint32(0, 0x04034b50, true);
+        localView.setUint16(4, 20, true);
+        localView.setUint16(6, 0x0800, true);
+        localView.setUint16(8, 0, true);
+        localView.setUint16(10, 0, true);
+        localView.setUint16(12, 0, true);
+        localView.setUint32(14, crc, true);
+        localView.setUint32(18, size, true);
+        localView.setUint32(22, size, true);
+        localView.setUint16(26, nameBytes.length, true);
+        localHeader.set(nameBytes, 30);
+        localParts.push(localHeader, file.blob);
+
+        const centralHeader = new Uint8Array(46 + nameBytes.length);
+        const centralView = new DataView(centralHeader.buffer);
+        centralView.setUint32(0, 0x02014b50, true);
+        centralView.setUint16(4, 20, true);
+        centralView.setUint16(6, 20, true);
+        centralView.setUint16(8, 0x0800, true);
+        centralView.setUint16(10, 0, true);
+        centralView.setUint16(12, 0, true);
+        centralView.setUint16(14, 0, true);
+        centralView.setUint32(16, crc, true);
+        centralView.setUint32(20, size, true);
+        centralView.setUint32(24, size, true);
+        centralView.setUint16(28, nameBytes.length, true);
+        centralView.setUint32(42, offset, true);
+        centralHeader.set(nameBytes, 46);
+        centralParts.push(centralHeader);
+
+        offset += localHeader.length + size;
+      }
+
+      const centralSize = centralParts.reduce((sum, part) => sum + part.length, 0);
+      const end = new Uint8Array(22);
+      const endView = new DataView(end.buffer);
+      endView.setUint32(0, 0x06054b50, true);
+      endView.setUint16(8, files.length, true);
+      endView.setUint16(10, files.length, true);
+      endView.setUint32(12, centralSize, true);
+      endView.setUint32(16, offset, true);
+
+      return new Blob([...localParts, ...centralParts, end], { type: "application/zip" });
+    }
+
+    function makeCrcTable() {
+      const table = new Uint32Array(256);
+      for (let i = 0; i < 256; i += 1) {
+        let c = i;
+        for (let k = 0; k < 8; k += 1) {
+          c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+        }
+        table[i] = c >>> 0;
+      }
+      return table;
+    }
+
+    const crcTable = makeCrcTable();
+
+    async function crc32(blob) {
+      const bytes = new Uint8Array(await blob.arrayBuffer());
+      let crc = 0xffffffff;
+      for (let i = 0; i < bytes.length; i += 1) {
+        crc = crcTable[(crc ^ bytes[i]) & 0xff] ^ (crc >>> 8);
+      }
+      return (crc ^ 0xffffffff) >>> 0;
+    }
+
+    function downloadBlob(blob, filename) {
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+    }
+
+    function downloadReadyZip() {
+      if (!state.zipBlob) return;
+      downloadBlob(state.zipBlob, state.zipName || "jpg-compressed.zip");
+      setStatus(`已送出下載：${state.zipName || "jpg-compressed.zip"}`);
+    }
+
+    function sanitizeZipName(name) {
+      return name.replace(/[\\/:*?"<>|]+/g, "_");
+    }
+
+    function makeOutputName(name) {
+      const dotIndex = name.lastIndexOf(".");
+      const base = dotIndex > 0 ? name.slice(0, dotIndex) : name;
+      return `compressed_${base}.jpg`;
+    }
+
+    function clearAll() {
+      state.items.forEach((item) => URL.revokeObjectURL(item.previewUrl));
+      state.items = [];
+      state.zipBlob = null;
+      state.zipName = "";
+      render();
+      setStatus("尚未選取照片");
+    }
+
+    function getTargetBytes() {
+      const mb = Math.max(0.2, Number(els.targetSize.value) || 2);
+      return Math.round(mb * 1024 * 1024);
+    }
+
+    function render() {
+      if (!state.items.length) {
+        els.rows.innerHTML = '<tr><td class="empty" colspan="6">選取照片後，處理結果會顯示在這裡。</td></tr>';
+      } else {
+        els.rows.innerHTML = state.items.map(rowTemplate).join("");
+      }
+      updateSummary();
+      updateControls();
+    }
+
+    function renderRow(item) {
+      const row = document.getElementById(`row-${item.id}`);
+      if (row) row.outerHTML = rowTemplate(item);
+      updateSummary();
+    }
+
+    function rowTemplate(item) {
+      const statusClass = {
+        queued: "queued",
+        working: "working",
+        done: "done",
+        warning: "warning",
+        error: "error"
+      }[item.status] || "queued";
+
+      return `
+        <tr id="row-${item.id}">
+          <td>
+            <div class="name-cell">
+              <img class="thumb" src="${item.previewUrl}" alt="">
+              <div class="filename">${escapeHtml(item.name)}</div>
+            </div>
+          </td>
+          <td>${formatBytes(item.before)}</td>
+          <td>${item.after ? formatBytes(item.after) : "-"}</td>
+          <td>${item.width && item.height ? `${item.width} x ${item.height}` : "-"}</td>
+          <td><span class="pill ${statusClass}">${escapeHtml(item.message)}</span></td>
+          <td><div class="progress"><div class="bar" style="width:${item.progress}%"></div></div></td>
+        </tr>
+      `;
+    }
+
+    function updateSummary() {
+      const before = state.items.reduce((sum, item) => sum + item.before, 0);
+      const after = state.items.reduce((sum, item) => sum + (item.after || 0), 0);
+      const saved = before && after ? Math.max(0, Math.round((1 - after / before) * 100)) : 0;
+      els.countMetric.textContent = state.items.length.toString();
+      els.beforeMetric.textContent = formatBytes(before);
+      els.afterMetric.textContent = formatBytes(after);
+      els.savedMetric.textContent = `${saved}%`;
+    }
+
+    function updateControls() {
+      els.compressBtn.disabled = !state.items.length || state.running;
+      els.downloadBtn.hidden = !state.zipBlob;
+      els.downloadBtn.disabled = !state.zipBlob || state.running;
+      els.clearBtn.disabled = !state.items.length || state.running;
+      els.targetSize.disabled = state.running;
+    }
+
+    function setStatus(message) {
+      els.status.textContent = message;
+    }
+
+    function formatBytes(bytes) {
+      if (!bytes) return "0 MB";
+      const mb = bytes / 1024 / 1024;
+      if (mb >= 0.1) return `${mb.toFixed(2)} MB`;
+      return `${(bytes / 1024).toFixed(0)} KB`;
+    }
+
+    function escapeHtml(text) {
+      return text.replace(/[&<>"']/g, (char) => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#039;"
+      }[char]));
+    }
+  </script>
+</body>
+</html>
