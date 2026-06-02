@@ -86,13 +86,28 @@
       white-space: nowrap;
     }
 
-    .settings input {
+    .settings input[type="number"] {
       width: 82px;
       padding: 8px 10px;
       border: 1px solid var(--line);
       border-radius: 6px;
       color: var(--ink);
       background: #fff;
+    }
+
+    .settings .size-input {
+      width: 96px;
+    }
+
+    .settings .checkbox-label {
+      color: var(--ink);
+      font-weight: 700;
+    }
+
+    .settings input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      accent-color: var(--accent);
     }
 
     .dropzone {
@@ -246,7 +261,7 @@
 
     table {
       width: 100%;
-      min-width: 760px;
+      min-width: 980px;
       border-collapse: collapse;
     }
 
@@ -327,6 +342,46 @@
       background: #fee4e2;
     }
 
+    .row-settings {
+      display: grid;
+      grid-template-columns: 78px 78px;
+      gap: 7px;
+      min-width: 178px;
+    }
+
+    .row-settings label {
+      display: grid;
+      gap: 3px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .row-settings input[type="number"] {
+      width: 100%;
+      padding: 7px 8px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fff;
+      color: var(--ink);
+      font-size: 13px;
+    }
+
+    .row-settings .row-check {
+      grid-column: 1 / -1;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--ink);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .row-settings input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      accent-color: var(--accent);
+    }
+
     .progress {
       width: 100%;
       height: 9px;
@@ -393,6 +448,16 @@
         <label for="targetSize">每張小於</label>
         <input id="targetSize" type="number" min="0.2" max="20" step="0.1" value="2">
         <span>MB</span>
+        <label for="resizeWidth">寬</label>
+        <input id="resizeWidth" class="size-input" type="number" min="1" max="12000" step="1" placeholder="不指定">
+        <span>px</span>
+        <label for="resizeHeight">高</label>
+        <input id="resizeHeight" class="size-input" type="number" min="1" max="12000" step="1" placeholder="不指定">
+        <span>px</span>
+        <label class="checkbox-label" for="keepAspect">
+          <input id="keepAspect" type="checkbox" checked>
+          保持比例
+        </label>
       </div>
     </header>
 
@@ -441,13 +506,14 @@
             <th>照片</th>
             <th>原始大小</th>
             <th>壓縮後</th>
-            <th>尺寸</th>
+            <th>輸出尺寸</th>
+            <th>結果尺寸</th>
             <th>狀態</th>
             <th>進度</th>
           </tr>
         </thead>
         <tbody id="fileRows">
-          <tr><td class="empty" colspan="6">選取照片後，處理結果會顯示在這裡。</td></tr>
+          <tr><td class="empty" colspan="7">選取照片後，處理結果會顯示在這裡。</td></tr>
         </tbody>
       </table>
     </section>
@@ -472,6 +538,9 @@
       status: document.getElementById("status"),
       rows: document.getElementById("fileRows"),
       targetSize: document.getElementById("targetSize"),
+      resizeWidth: document.getElementById("resizeWidth"),
+      resizeHeight: document.getElementById("resizeHeight"),
+      keepAspect: document.getElementById("keepAspect"),
       countMetric: document.getElementById("countMetric"),
       beforeMetric: document.getElementById("beforeMetric"),
       afterMetric: document.getElementById("afterMetric"),
@@ -484,7 +553,18 @@
     els.clearBtn.addEventListener("click", clearAll);
     els.targetSize.addEventListener("input", () => {
       state.zipBlob = null;
+      state.zipName = "";
+      state.items.forEach(resetItemResult);
+      render();
       updateControls();
+    });
+    [els.resizeWidth, els.resizeHeight, els.keepAspect].forEach((input) => {
+      input.addEventListener("input", () => {
+        state.zipBlob = null;
+        applyGlobalResizeOptions();
+        render();
+        updateControls();
+      });
     });
 
     ["dragenter", "dragover"].forEach((eventName) => {
@@ -505,6 +585,8 @@
       addFiles(event.dataTransfer.files);
     });
 
+    els.rows.addEventListener("change", handleRowSettingChange);
+
     function addFiles(fileList) {
       const files = Array.from(fileList || []).filter((file) => {
         const name = file.name.toLowerCase();
@@ -524,6 +606,9 @@
         after: null,
         width: null,
         height: null,
+        resizeWidth: Math.max(0, Math.round(Number(els.resizeWidth.value) || 0)),
+        resizeHeight: Math.max(0, Math.round(Number(els.resizeHeight.value) || 0)),
+        keepAspect: els.keepAspect.checked,
         outputBlob: null,
         previewUrl: URL.createObjectURL(file),
         progress: 0,
@@ -554,7 +639,7 @@
         render();
 
         try {
-          const result = await compressImage(item.file, targetBytes, (progress) => {
+          const result = await compressImage(item.file, targetBytes, getItemResizeOptions(item), (progress) => {
             item.progress = progress;
             renderRow(item);
           });
@@ -593,16 +678,9 @@
       updateControls();
     }
 
-    async function compressImage(file, targetBytes, onProgress) {
+    async function compressImage(file, targetBytes, resizeOptions, onProgress) {
       const image = await loadImage(file);
-      let width = image.naturalWidth;
-      let height = image.naturalHeight;
-
-      const sideScale = Math.min(1, MAX_CANVAS_SIDE / Math.max(width, height));
-      if (sideScale < 1) {
-        width = Math.round(width * sideScale);
-        height = Math.round(height * sideScale);
-      }
+      let { width, height } = getOutputDimensions(image.naturalWidth, image.naturalHeight, resizeOptions);
 
       let canvas = drawImage(image, width, height);
       let high = 0.92;
@@ -818,6 +896,96 @@
       return Math.round(mb * 1024 * 1024);
     }
 
+    function getResizeOptions() {
+      return {
+        width: Math.max(0, Math.round(Number(els.resizeWidth.value) || 0)),
+        height: Math.max(0, Math.round(Number(els.resizeHeight.value) || 0)),
+        keepAspect: els.keepAspect.checked
+      };
+    }
+
+    function applyGlobalResizeOptions() {
+      const options = getResizeOptions();
+      state.items.forEach((item) => {
+        item.resizeWidth = options.width;
+        item.resizeHeight = options.height;
+        item.keepAspect = options.keepAspect;
+        resetItemResult(item);
+      });
+    }
+
+    function getItemResizeOptions(item) {
+      return {
+        width: Math.max(0, Math.round(Number(item.resizeWidth) || 0)),
+        height: Math.max(0, Math.round(Number(item.resizeHeight) || 0)),
+        keepAspect: Boolean(item.keepAspect)
+      };
+    }
+
+    function handleRowSettingChange(event) {
+      const input = event.target.closest("[data-setting]");
+      if (!input || state.running) return;
+
+      const row = input.closest("tr");
+      const item = row ? state.items.find((candidate) => candidate.id === row.id.replace("row-", "")) : null;
+      if (!item) return;
+
+      const setting = input.dataset.setting;
+      if (setting === "resizeWidth") {
+        item.resizeWidth = Math.max(0, Math.round(Number(input.value) || 0));
+      } else if (setting === "resizeHeight") {
+        item.resizeHeight = Math.max(0, Math.round(Number(input.value) || 0));
+      } else if (setting === "keepAspect") {
+        item.keepAspect = input.checked;
+      }
+
+      state.zipBlob = null;
+      state.zipName = "";
+      resetItemResult(item);
+      renderRow(item);
+      updateSummary();
+      updateControls();
+      setStatus("已更新單張照片設定，請重新壓縮");
+    }
+
+    function resetItemResult(item) {
+      item.after = null;
+      item.width = null;
+      item.height = null;
+      item.outputBlob = null;
+      item.progress = 0;
+      item.status = "queued";
+      item.message = "等待中";
+    }
+
+    function getOutputDimensions(originalWidth, originalHeight, options) {
+      const requestedWidth = options.width;
+      const requestedHeight = options.height;
+      let width = originalWidth;
+      let height = originalHeight;
+
+      if (requestedWidth || requestedHeight) {
+        if (options.keepAspect) {
+          const widthScale = requestedWidth ? requestedWidth / originalWidth : Infinity;
+          const heightScale = requestedHeight ? requestedHeight / originalHeight : Infinity;
+          const scale = Math.min(widthScale, heightScale, 1);
+          width = Math.max(1, Math.round(originalWidth * scale));
+          height = Math.max(1, Math.round(originalHeight * scale));
+        } else {
+          width = requestedWidth || originalWidth;
+          height = requestedHeight || originalHeight;
+        }
+      }
+
+      const sideScale = Math.min(1, MAX_CANVAS_SIDE / Math.max(width, height));
+      if (sideScale < 1) {
+        width = Math.round(width * sideScale);
+        height = Math.round(height * sideScale);
+      }
+
+      return { width, height };
+    }
+
     function render() {
       if (!state.items.length) {
         els.rows.innerHTML = '<tr><td class="empty" colspan="6">選取照片後，處理結果會顯示在這裡。</td></tr>';
@@ -843,6 +1011,11 @@
         error: "error"
       }[item.status] || "queued";
 
+      const disabled = state.running ? "disabled" : "";
+      const resizeWidth = item.resizeWidth || "";
+      const resizeHeight = item.resizeHeight || "";
+      const keepAspect = item.keepAspect ? "checked" : "";
+
       return `
         <tr id="row-${item.id}">
           <td>
@@ -853,6 +1026,20 @@
           </td>
           <td>${formatBytes(item.before)}</td>
           <td>${item.after ? formatBytes(item.after) : "-"}</td>
+          <td>
+            <div class="row-settings">
+              <label>寬
+                <input data-setting="resizeWidth" type="number" min="1" max="12000" step="1" value="${resizeWidth}" placeholder="原圖" ${disabled}>
+              </label>
+              <label>高
+                <input data-setting="resizeHeight" type="number" min="1" max="12000" step="1" value="${resizeHeight}" placeholder="原圖" ${disabled}>
+              </label>
+              <label class="row-check">
+                <input data-setting="keepAspect" type="checkbox" ${keepAspect} ${disabled}>
+                保持比例
+              </label>
+            </div>
+          </td>
           <td>${item.width && item.height ? `${item.width} x ${item.height}` : "-"}</td>
           <td><span class="pill ${statusClass}">${escapeHtml(item.message)}</span></td>
           <td><div class="progress"><div class="bar" style="width:${item.progress}%"></div></div></td>
@@ -876,6 +1063,9 @@
       els.downloadBtn.disabled = !state.zipBlob || state.running;
       els.clearBtn.disabled = !state.items.length || state.running;
       els.targetSize.disabled = state.running;
+      els.resizeWidth.disabled = state.running;
+      els.resizeHeight.disabled = state.running;
+      els.keepAspect.disabled = state.running;
     }
 
     function setStatus(message) {
