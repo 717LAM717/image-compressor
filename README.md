@@ -41,7 +41,7 @@
 ## GitHub Pages 部署
 
 1. 在 GitHub 建立或開啟 repository。
-2. 上傳 `index.html`、`README.md`、`.nojekyll`。
+2. 上傳 `index.html`、`README.md`、`.nojekyll`、`logo.jpg`。
 3. 到 repository 的 Settings -> Pages。
 4. Source 選 `Deploy from a branch`。
 5. Branch 選 `main`，資料夾選 `/root`。
